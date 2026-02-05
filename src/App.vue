@@ -1,10 +1,10 @@
 <template>
   <div class="App">
-    <Navbar />
+    <Navbar v-if="showNavbar" />
     <main>
       <router-view />
     </main>
-    <Footer />
+    <Footer v-if="showFooter" />
   </div>
 </template>
 
@@ -17,6 +17,16 @@ export default {
   components: {
     Navbar,
     Footer
+  },
+  computed: {
+    showNavbar() {
+      const noNavbarRoutes = ['/welcome', '/login', '/register']
+      return !noNavbarRoutes.includes(this.$route.path)
+    },
+    showFooter() {
+      const noFooterRoutes = ['/welcome', '/login', '/register']
+      return !noFooterRoutes.includes(this.$route.path)
+    }
   }
 }
 </script>
