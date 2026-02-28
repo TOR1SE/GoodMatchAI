@@ -8,6 +8,7 @@
         <div class="hero-buttons">
           <router-link to="/donation/create" class="btn btn-primary">发布捐赠</router-link>
           <router-link to="/demand/create" class="btn btn-secondary">发布需求</router-link>
+          <router-link to="/disaster" class="btn btn-disaster">灾区详情</router-link>
         </div>
       </div>
     </section>
@@ -52,6 +53,7 @@
         </div>
       </div>
     </section>
+
   </div>
 </template>
 
@@ -123,5 +125,16 @@ export default {
   background-color: #545b62;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+}
+
+.hero-buttons .btn-disaster {
+  background-color: #C2704A;
+  color: white;
+}
+
+.hero-buttons .btn-disaster:hover {
+  background-color: #A85D3A;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(194, 112, 74, 0.3);
 }
 </style>

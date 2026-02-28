@@ -63,10 +63,85 @@
               <div v-if="!isEditing">
                 <button class="btn btn-primary" @click="startEdit">编辑信息</button>
                 <button class="btn btn-secondary" @click="changePassword">修改密码</button>
+                <button class="btn btn-danger" @click="confirmDeleteUser">删除账号</button>
               </div>
               <div v-else>
                 <button class="btn btn-primary" @click="saveEdit">保存</button>
                 <button class="btn btn-secondary" @click="cancelEdit">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 删除账号确认弹窗 -->
+          <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+            <div class="modal-content" @click.stop>
+              <div class="modal-header">
+                <h3>删除账号</h3>
+                <button class="modal-close" @click="closeDeleteModal">&times;</button>
+              </div>
+              <div class="modal-body">
+                <p class="warning-text">
+                  <i class="fas fa-exclamation-triangle"></i>
+                  警告：此操作不可恢复！删除账号后，您的所有数据将被永久删除。
+                </p>
+                <p>请输入 "<strong>确认删除</strong>" 以继续：</p>
+                <div class="form-group">
+                  <input
+                    type="text"
+                    v-model="deleteConfirmText"
+                    placeholder="请输入确认删除"
+                  >
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-secondary" @click="closeDeleteModal">取消</button>
+                <button class="btn btn-danger" @click="handleDeleteUser" :disabled="deleteConfirmText !== '确认删除'">确认删除</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 修改密码弹窗 -->
+          <div v-if="showPasswordModal" class="modal-overlay" @click="closePasswordModal">
+            <div class="modal-content" @click.stop>
+              <div class="modal-header">
+                <h3>修改密码</h3>
+                <button class="modal-close" @click="closePasswordModal">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label>旧密码</label>
+                  <input
+                    type="password"
+                    v-model="passwordForm.oldPassword"
+                    @input="clearPasswordError('oldPassword')"
+                    placeholder="请输入旧密码"
+                  >
+                  <div v-if="passwordErrors.oldPassword" class="error-text">{{ passwordErrors.oldPassword }}</div>
+                </div>
+                <div class="form-group">
+                  <label>新密码</label>
+                  <input
+                    type="password"
+                    v-model="passwordForm.newPassword"
+                    @input="clearPasswordError('newPassword')"
+                    placeholder="请输入新密码（至少6位）"
+                  >
+                  <div v-if="passwordErrors.newPassword" class="error-text">{{ passwordErrors.newPassword }}</div>
+                </div>
+                <div class="form-group">
+                  <label>确认新密码</label>
+                  <input
+                    type="password"
+                    v-model="passwordForm.confirmPassword"
+                    @input="clearPasswordError('confirmPassword')"
+                    placeholder="请再次输入新密码"
+                  >
+                  <div v-if="passwordErrors.confirmPassword" class="error-text">{{ passwordErrors.confirmPassword }}</div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-secondary" @click="closePasswordModal">取消</button>
+                <button class="btn btn-primary" @click="submitPasswordChange">确认修改</button>
               </div>
             </div>
           </div>
@@ -220,16 +295,18 @@
 </template>
 
 <script>
+import { getUserInfo, updateUserInfo, updatePassword, deleteUser } from '../services/api.js'
+
 export default {
   name: 'UserCenterPage',
   data() {
     return {
       userInfo: {
-        username: '爱心用户',
-        realName: '张爱心',
-        phone: '13800138000',
-        email: 'love@example.com',
-        registerTime: '2024-01-15 10:30'
+        username: '',
+        realName: '',
+        phone: '',
+        email: '',
+        registerTime: ''
       },
       // 编辑信息相关
       isEditing: false,
@@ -300,14 +377,50 @@ export default {
         pending: '待确认',
         confirmed: '已确认',
         cancelled: '已取消'
-      }
+      },
+      // 修改密码弹窗
+      showPasswordModal: false,
+      passwordForm: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
+      passwordErrors: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
+      // 删除账号弹窗
+      showDeleteModal: false,
+      deleteConfirmText: ''
     }
+  },
+  mounted() {
+    this.loadUserInfo();
   },
   methods: {
     getMatchDegreeClass(degree) {
       if (degree >= 90) return 'high';
       if (degree >= 70) return 'medium';
       return 'low';
+    },
+    // 加载用户信息
+    async loadUserInfo() {
+      try {
+        const res = await getUserInfo();
+        if (res.success) {
+          const data = res.data;
+          this.userInfo = {
+            username: data.uname,
+            realName: data.uname,
+            phone: data.phone,
+            email: data.email,
+            registerTime: data.createTime
+          };
+        }
+      } catch (error) {
+        alert('获取用户信息失败：' + error.message);
+      }
     },
     // 编辑信息相关方法
     startEdit() {
@@ -317,18 +430,20 @@ export default {
       // 保存原始信息以便取消编辑时恢复
       this.originalUserInfo = JSON.parse(JSON.stringify(this.userInfo));
     },
-    saveEdit() {
+    async saveEdit() {
       // 验证表单数据
-      if (!this.editForm.username || !this.editForm.realName || !this.editForm.phone || !this.editForm.email) {
-        alert('请填写所有必填字段');
+      if (!this.editForm.username || !this.editForm.phone) {
+        alert('用户名和手机号不能为空');
         return;
       }
       
-      // 简单的邮箱格式验证
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(this.editForm.email)) {
-        alert('请输入有效的邮箱地址');
-        return;
+      // 简单的邮箱格式验证（如果填写了）
+      if (this.editForm.email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(this.editForm.email)) {
+          alert('请输入有效的邮箱地址');
+          return;
+        }
       }
       
       // 简单的手机号格式验证
@@ -338,18 +453,131 @@ export default {
         return;
       }
       
-      // 保存编辑后的信息
-      this.userInfo = JSON.parse(JSON.stringify(this.editForm));
-      this.isEditing = false;
-      alert('信息编辑成功');
+      try {
+        const res = await updateUserInfo(
+          this.editForm.username,
+          this.editForm.phone,
+          this.editForm.email
+        );
+        
+        if (res.success) {
+          // 保存编辑后的信息
+          this.userInfo = JSON.parse(JSON.stringify(this.editForm));
+          this.isEditing = false;
+          alert('信息编辑成功');
+        }
+      } catch (error) {
+        alert('保存失败：' + error.message);
+      }
     },
     cancelEdit() {
       // 恢复原始信息并退出编辑模式
       this.userInfo = JSON.parse(JSON.stringify(this.originalUserInfo));
       this.isEditing = false;
     },
+    // 修改密码相关方法
     changePassword() {
-      alert('修改密码功能将在后续版本中实现');
+      this.showPasswordModal = true;
+      this.passwordForm = {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      };
+      this.passwordErrors = {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      };
+    },
+    closePasswordModal() {
+      this.showPasswordModal = false;
+    },
+    clearPasswordError(field) {
+      if (this.passwordErrors[field]) {
+        this.passwordErrors[field] = '';
+      }
+    },
+    validatePasswordForm() {
+      let isValid = true;
+      Object.keys(this.passwordErrors).forEach(key => this.passwordErrors[key] = '');
+
+      if (!this.passwordForm.oldPassword) {
+        this.passwordErrors.oldPassword = '请输入旧密码';
+        isValid = false;
+      }
+
+      if (!this.passwordForm.newPassword) {
+        this.passwordErrors.newPassword = '请输入新密码';
+        isValid = false;
+      } else if (this.passwordForm.newPassword.length < 6) {
+        this.passwordErrors.newPassword = '密码至少6个字符';
+        isValid = false;
+      }
+
+      if (!this.passwordForm.confirmPassword) {
+        this.passwordErrors.confirmPassword = '请确认新密码';
+        isValid = false;
+      } else if (this.passwordForm.confirmPassword !== this.passwordForm.newPassword) {
+        this.passwordErrors.confirmPassword = '两次输入的密码不一致';
+        isValid = false;
+      }
+
+      return isValid;
+    },
+    async submitPasswordChange() {
+      if (!this.validatePasswordForm()) return;
+
+      try {
+        const res = await updatePassword(
+          this.passwordForm.oldPassword,
+          this.passwordForm.newPassword
+        );
+
+        if (res.success) {
+          alert('密码修改成功！请使用新密码重新登录');
+          this.showPasswordModal = false;
+          // 可选：退出登录
+          // localStorage.removeItem('accessToken');
+          // localStorage.removeItem('refreshToken');
+          // this.$router.push('/login');
+        }
+      } catch (error) {
+        alert(error.message || '修改密码失败');
+      }
+    },
+    // 删除账号相关方法
+    confirmDeleteUser() {
+      this.showDeleteModal = true;
+      this.deleteConfirmText = '';
+    },
+    closeDeleteModal() {
+      this.showDeleteModal = false;
+      this.deleteConfirmText = '';
+    },
+    async handleDeleteUser() {
+      if (this.deleteConfirmText !== '确认删除') {
+        alert('请输入正确的确认文字');
+        return;
+      }
+
+      if (!confirm('确定要永久删除您的账号吗？此操作不可恢复！')) {
+        return;
+      }
+
+      try {
+        const res = await deleteUser();
+        if (res.success) {
+          alert('账号删除成功');
+          // 清除本地存储的token
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('rememberLogin');
+          // 跳转到登录页
+          this.$router.push('/login');
+        }
+      } catch (error) {
+        alert(error.message || '删除账号失败');
+      }
     }
   }
 }
@@ -670,5 +898,126 @@ export default {
 .btn-sm {
   padding: 4px 8px;
   font-size: 12px;
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-body .form-group {
+  margin-bottom: 16px;
+}
+
+.modal-body .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #333;
+}
+
+.modal-body .form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.modal-body .form-group input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.error-text {
+  color: #dc3545;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* 删除按钮样式 */
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 警告文本样式 */
+.warning-text {
+  color: #dc3545;
+  font-weight: 500;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.warning-text i {
+  font-size: 18px;
 }
 </style>

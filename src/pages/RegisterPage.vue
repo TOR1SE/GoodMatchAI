@@ -143,7 +143,8 @@
               </div>
               <div class="captcha-image-container">
                 <div class="captcha-image" @click="refreshCaptcha">
-                  <div class="captcha-text">{{ captchaText }}</div>
+                  <img v-if="captchaImage" :src="captchaImage" alt="验证码" style="width: 100%; height: 100%; object-fit: contain;">
+                  <div v-else class="captcha-placeholder">加载中...</div>
                 </div>
                 <div class="refresh-captcha" @click="refreshCaptcha">
                   <i class="fas fa-sync-alt"></i> 换一张
@@ -194,7 +195,7 @@
 </template>
 
 <script>
-import { register } from '../services/api.js'
+import { register, getCaptcha } from '../services/api.js'
 
 export default {
   name: 'RegisterPage',
@@ -221,11 +222,12 @@ export default {
         agreePrivacy: ''
       },
       registerLoading: false,
-      captchaText: ''
+      captchaId: '',
+      captchaImage: ''
     }
   },
   mounted() {
-    this.generateCaptcha();
+    this.loadCaptcha();
   },
   methods: {
     goToHome() {
@@ -234,16 +236,20 @@ export default {
     goToLogin() {
       this.$router.push('/login');
     },
-    generateCaptcha() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let result = '';
-      for (let i = 0; i < 6; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    async loadCaptcha() {
+      try {
+        const res = await getCaptcha();
+        if (res.success) {
+          this.captchaId = res.data.captcha_id;
+          this.captchaImage = res.data.captcha_image;
+        }
+      } catch (error) {
+        console.error('获取验证码失败:', error);
+        alert('获取验证码失败，请刷新页面重试');
       }
-      this.captchaText = result;
     },
     refreshCaptcha() {
-      this.generateCaptcha();
+      this.loadCaptcha();
       this.registerForm.captcha = '';
       this.clearRegisterError('captcha');
     },
@@ -303,10 +309,6 @@ export default {
       if (!this.registerForm.captcha.trim()) {
         this.registerErrors.captcha = '请输入验证码';
         isValid = false;
-      } else if (this.registerForm.captcha.toUpperCase() !== this.captchaText) {
-        this.registerErrors.captcha = '验证码错误，请重新输入';
-        isValid = false;
-        setTimeout(this.refreshCaptcha, 500);
       }
 
       if (!this.registerForm.agreeTerms) {
@@ -327,22 +329,25 @@ export default {
       this.registerLoading = true;
 
       try {
-        // 验证验证码
-        if (this.registerForm.captcha.toUpperCase() !== this.captchaText) {
-          alert('验证码错误，请重新输入');
+        // 调用注册API - 使用手机号作为account
+        const res = await register(
+          this.registerForm.username,
+          this.registerForm.phone,
+          this.registerForm.password,
+          this.captchaId,
+          this.registerForm.captcha
+        );
+
+        if (res.success) {
+          alert('注册成功！请登录您的账号。');
+          this.$router.push('/login');
+        } else {
+          alert(res.message || '注册失败');
           this.refreshCaptcha();
-          this.registerLoading = false;
-          return;
         }
-
-        // 调用注册接口 - 使用手机号或邮箱作为账号
-        const account = this.registerForm.phone || this.registerForm.email;
-        const response = await register(account, this.registerForm.password, this.registerForm.captcha);
-
-        alert(response.message || `注册成功！请登录您的账号。\n用户名：${this.registerForm.username}\n手机号：${this.registerForm.phone}\n邮箱：${this.registerForm.email}`);
-        this.$router.push('/login');
       } catch (error) {
-        alert(error.message || '注册失败，请检查输入信息');
+        console.error('注册错误:', error);
+        alert(error.message || '注册失败，请重试');
         this.refreshCaptcha();
       } finally {
         this.registerLoading = false;

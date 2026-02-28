@@ -32,8 +32,11 @@
           <router-link to="/admin" class="nav-link" active-class="active">管理后台</router-link>
         </li> -->
         
-        <li class="nav-item">
+        <li v-if="!isLoggedIn" class="nav-item">
           <router-link to="/login" class="nav-link" active-class="active">登录</router-link>
+        </li>
+        <li v-else class="nav-item">
+          <button class="nav-link logout-btn" @click="handleLogout">退出登录</button>
         </li>
       </ul>
     </div>
@@ -41,7 +44,46 @@
 </template>
 
 <script setup>
-// Vue 3 组合式API
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { logout } from '../services/api.js'
+
+const router = useRouter()
+const isLoggedIn = ref(false)
+
+// 检查登录状态
+const checkLoginStatus = () => {
+  isLoggedIn.value = !!localStorage.getItem('accessToken')
+}
+
+// 处理登出
+const handleLogout = async () => {
+  try {
+    await logout()
+  } catch (error) {
+    console.error('登出请求失败:', error)
+  } finally {
+    // 清除本地存储的token
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('rememberLogin')
+    
+    // 更新登录状态
+    isLoggedIn.value = false
+    
+    // 跳转到登录页
+    router.push('/login')
+    
+    alert('已成功退出登录')
+  }
+}
+
+// 组件挂载时检查登录状态
+onMounted(() => {
+  checkLoginStatus()
+  // 监听storage变化，同步登录状态
+  window.addEventListener('storage', checkLoginStatus)
+})
 </script>
 
 <style scoped>
@@ -114,6 +156,21 @@
   height: 2px;
   background-color: #007bff;
   transition: width 0.3s ease;
+}
+
+/* 退出登录按钮样式 */
+.logout-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #dc3545;
+  padding: 8px 0;
+  transition: color 0.3s ease;
+}
+
+.logout-btn:hover {
+  color: #c82333;
 }
 
 /* 响应式设计 */

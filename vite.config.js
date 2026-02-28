@@ -6,7 +6,16 @@ export default defineConfig({
   plugins: [
     vue(),
     VueInspector({
-      toggleKeyCombo: 'ctrl-shift-click'  // ← 就是这里！加了这个参数
+      toggleKeyCombo: 'ctrl-shift-click'
     })
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://f3aeab96.xq0.cn:16368',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/api')
+      }
+    }
+  }
 })

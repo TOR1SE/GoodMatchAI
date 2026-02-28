@@ -1,7 +1,7 @@
 <template>
   <div class="auth-page page-enter-active">
-    <button class="auth-back-btn" @click="goToHome">
-      <i class="fas fa-arrow-left"></i> 返回主页
+    <button class="auth-back-btn" @click="goToLogin">
+      <i class="fas fa-arrow-left"></i> 返回登录
     </button>
 
     <div class="auth-container">
@@ -15,16 +15,16 @@
         <div class="auth-header">
           <div class="auth-logo">
             <div class="auth-logo-icon">
-              <i class="fas fa-sign-in-alt"></i>
+              <i class="fas fa-key"></i>
             </div>
             <div class="auth-logo-text">
-              <h2>用户登录</h2>
+              <h2>重设密码</h2>
               <p>AI公益资源调度平台</p>
             </div>
           </div>
         </div>
 
-        <form class="auth-form" @submit.prevent="handleLogin">
+        <form class="auth-form" @submit.prevent="handleResetPassword">
           <!-- 账号 -->
           <div class="form-group">
             <label class="form-label" for="account">账号</label>
@@ -34,8 +34,8 @@
                 type="text"
                 id="account"
                 class="form-control"
-                placeholder="请输入账号"
-                v-model="loginForm.account"
+                placeholder="请输入账号（手机号）"
+                v-model="resetForm.account"
                 @input="clearError('account')"
               >
             </div>
@@ -45,23 +45,43 @@
             </div>
           </div>
 
-          <!-- 密码 -->
+          <!-- 新密码 -->
           <div class="form-group">
-            <label class="form-label" for="password">密码</label>
+            <label class="form-label" for="newPassword">新密码</label>
             <div class="input-with-icon">
               <i class="fas fa-lock input-icon"></i>
               <input
                 type="password"
-                id="password"
+                id="newPassword"
                 class="form-control"
-                placeholder="请输入密码"
-                v-model="loginForm.password"
-                @input="clearError('password')"
+                placeholder="请输入新密码（至少6位）"
+                v-model="resetForm.newPassword"
+                @input="clearError('newPassword')"
               >
             </div>
-            <div v-if="errors.password" class="error-message">
+            <div v-if="errors.newPassword" class="error-message">
               <i class="fas fa-exclamation-circle"></i>
-              {{ errors.password }}
+              {{ errors.newPassword }}
+            </div>
+          </div>
+
+          <!-- 确认新密码 -->
+          <div class="form-group">
+            <label class="form-label" for="confirmPassword">确认新密码</label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock input-icon"></i>
+              <input
+                type="password"
+                id="confirmPassword"
+                class="form-control"
+                placeholder="请再次输入新密码"
+                v-model="resetForm.confirmPassword"
+                @input="clearError('confirmPassword')"
+              >
+            </div>
+            <div v-if="errors.confirmPassword" class="error-message">
+              <i class="fas fa-exclamation-circle"></i>
+              {{ errors.confirmPassword }}
             </div>
           </div>
 
@@ -76,51 +96,46 @@
                   id="captcha"
                   class="form-control"
                   placeholder="请输入验证码"
-                  v-model="loginForm.captcha"
-                  @input="clearError('captcha')"
+                  v-model="resetForm.captcha_value"
+                  @input="clearError('captcha_value')"
                   maxlength="6"
                 >
               </div>
               <div class="captcha-image-container">
-                <div class="captcha-image" @click="refreshCaptcha">
-                  <img v-if="captchaImage" :src="captchaImage" alt="验证码" style="width: 100%; height: 100%; object-fit: contain;">
-                  <div v-else class="captcha-placeholder">加载中...</div>
+                <div
+                  class="captcha-image"
+                  @click="refreshCaptcha"
+                  style="cursor: pointer; height: 40px; width: 120px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #ddd;"
+                >
+                  <img
+                    v-if="captcha_image"
+                    :src="captcha_image"
+                    style="height: 100%; width: 100%; object-fit: contain;"
+                    alt="验证码"
+                  >
+                  <span v-else style="color: #999; font-size: 12px;">加载中...</span>
                 </div>
                 <div class="refresh-captcha" @click="refreshCaptcha">
                   <i class="fas fa-sync-alt"></i> 换一张
                 </div>
               </div>
             </div>
-            <div v-if="errors.captcha" class="error-message">
+            <div v-if="errors.captcha_value" class="error-message">
               <i class="fas fa-exclamation-circle"></i>
-              {{ errors.captcha }}
+              {{ errors.captcha_value }}
             </div>
-          </div>
-
-          <div class="remember-forgot">
-            <div class="checkbox-container">
-              <input type="checkbox" id="remember" v-model="loginForm.remember">
-              <label for="remember">记住登录状态</label>
-            </div>
-            <a href="#" class="forgot-link" @click.prevent="showForgotPassword">忘记密码？</a>
           </div>
 
           <!-- 提交按钮 -->
           <button type="submit" class="submit-btn" :disabled="loading">
-            <i class="fas fa-sign-in-alt btn-icon"></i>
-            {{ loading ? '登录中...' : '登录平台' }}
+            <i class="fas fa-key btn-icon"></i>
+            {{ loading ? '提交中...' : '重设密码' }}
           </button>
 
-          <div class="demo-auth">
-            <button type="button" class="demo-btn" @click="fillDemoCredentials">
-              <i class="fas fa-user-secret"></i> 使用演示账号快速登录
-            </button>
-          </div>
-
           <div class="switch-auth">
-            还没有账号？
-            <a href="#" class="register-link" @click.prevent="goToRegister">
-              立即注册
+            想起密码了？
+            <a href="#" class="register-link" @click.prevent="goToLogin">
+              返回登录
             </a>
           </div>
         </form>
@@ -130,137 +145,120 @@
 </template>
 
 <script>
-import { login, getCaptcha } from '../services/api.js'
+import { resetPassword, getCaptcha } from '../services/api.js'
 
 export default {
-  name: 'LoginPage',
+  name: 'ResetPasswordPage',
   data() {
     return {
-      loginForm: {
+      resetForm: {
         account: '',
-        password: '',
-        captcha: '',
-        remember: false
+        newPassword: '',
+        confirmPassword: '',
+        captcha_value: ''
       },
       errors: {
         account: '',
-        password: '',
-        captcha: ''
+        newPassword: '',
+        confirmPassword: '',
+        captcha_value: ''
       },
       loading: false,
-      captchaId: '',
-      captchaImage: ''
+      captcha_id: '',
+      captcha_image: ''
     }
   },
   mounted() {
     this.loadCaptcha();
   },
   methods: {
-    goToHome() {
-      this.$router.push('/welcome');
-    },
-    goToRegister() {
-      this.$router.push('/register');
+    goToLogin() {
+      this.$router.push('/login');
     },
     async loadCaptcha() {
       try {
         const res = await getCaptcha();
         if (res.success) {
-          this.captchaId = res.data.captcha_id;
-          this.captchaImage = res.data.captcha_image;
+          this.captcha_id = res.data.captcha_id;
+          this.captcha_image = res.data.captcha_image;
         }
       } catch (error) {
         console.error('获取验证码失败:', error);
-        alert('获取验证码失败，请刷新页面重试');
       }
     },
-    refreshCaptcha() {
-      this.loadCaptcha();
-      this.loginForm.captcha = '';
-      this.clearError('captcha');
+    async refreshCaptcha() {
+      await this.loadCaptcha();
+      this.resetForm.captcha_value = '';
+      this.clearError('captcha_value');
     },
     clearError(field) {
       if (this.errors[field]) {
         this.errors[field] = '';
       }
     },
-    validateLoginForm() {
+    validateForm() {
       let isValid = true;
       Object.keys(this.errors).forEach(key => this.errors[key] = '');
 
-      if (!this.loginForm.account.trim()) {
+      // 验证账号
+      if (!this.resetForm.account.trim()) {
         this.errors.account = '请输入账号';
         isValid = false;
-      }
-
-      if (!this.loginForm.password) {
-        this.errors.password = '请输入密码';
-        isValid = false;
-      } else if (this.loginForm.password.length < 6) {
-        this.errors.password = '密码至少6个字符';
+      } else if (!/^1\d{10}$/.test(this.resetForm.account)) {
+        this.errors.account = '请输入正确的手机号';
         isValid = false;
       }
 
-      if (!this.loginForm.captcha.trim()) {
-        this.errors.captcha = '请输入验证码';
+      // 验证新密码
+      if (!this.resetForm.newPassword) {
+        this.errors.newPassword = '请输入新密码';
+        isValid = false;
+      } else if (this.resetForm.newPassword.length < 6) {
+        this.errors.newPassword = '密码至少6个字符';
+        isValid = false;
+      }
+
+      // 验证确认密码
+      if (!this.resetForm.confirmPassword) {
+        this.errors.confirmPassword = '请确认新密码';
+        isValid = false;
+      } else if (this.resetForm.confirmPassword !== this.resetForm.newPassword) {
+        this.errors.confirmPassword = '两次输入的密码不一致';
+        isValid = false;
+      }
+
+      // 验证验证码
+      if (!this.resetForm.captcha_value.trim()) {
+        this.errors.captcha_value = '请输入验证码';
         isValid = false;
       }
 
       return isValid;
     },
-    async handleLogin() {
-      if (!this.validateLoginForm()) return;
+    async handleResetPassword() {
+      if (!this.validateForm()) return;
 
       this.loading = true;
 
       try {
-        // 调用登录API
-        const res = await login(
-          this.loginForm.account,
-          this.loginForm.password,
-          this.captchaId,
-          this.loginForm.captcha
+        const res = await resetPassword(
+          this.resetForm.account,
+          this.resetForm.newPassword,
+          this.captcha_id,
+          this.resetForm.captcha_value
         );
 
         if (res.success) {
-          // 保存token
-          const { access_token, refresh_token } = res.data;
-          localStorage.setItem('accessToken', access_token);
-          localStorage.setItem('refreshToken', refresh_token);
-          localStorage.setItem('isLoggedIn', 'true');
-          
-          // 如果选择记住登录状态
-          if (this.loginForm.remember) {
-            localStorage.setItem('rememberLogin', 'true');
-          }
-
-          alert(`登录成功！欢迎登录AI公益资源调度平台`);
-          this.$router.push('/home');
-        } else {
-          alert(res.message || '登录失败');
-          this.refreshCaptcha();
+          alert('密码重设成功！请使用新密码登录');
+          this.$router.push('/login');
         }
       } catch (error) {
-        console.error('登录错误:', error);
-        alert(error.message || '登录失败，请检查账号密码');
+        alert(error.message || '重设密码失败');
         this.refreshCaptcha();
+        this.resetForm.captcha_value = '';
       } finally {
         this.loading = false;
       }
-    },
-    fillDemoCredentials() {
-      this.loginForm.account = 'demo';
-      this.loginForm.password = 'demo123';
-      this.loginForm.remember = true;
-
-      this.clearError('account');
-      this.clearError('password');
-      this.clearError('captcha');
-
-      alert('已填充演示账号信息，请输入验证码后点击登录按钮');
-    },
-    showForgotPassword() {
-      alert('忘记密码功能：请通过注册手机号或邮箱找回密码，或联系平台客服：400-123-4567');
     }
   }
 }
@@ -313,7 +311,7 @@ export default {
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
 }
 
-/* 进一步加大横版登录/注册容器 */
+/* 登录/注册容器 */
 .auth-container {
   width: 1050px;
   height: 650px;
@@ -425,7 +423,7 @@ export default {
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #7f8c8d;
+  color: #ffffff;
   font-size: 14px;
   z-index: 1;
 }
@@ -514,41 +512,6 @@ export default {
   text-decoration: underline;
 }
 
-/* 记住我/忘记密码 */
-.remember-forgot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  font-size: 12px;
-}
-
-.checkbox-container input {
-  margin-right: 5px;
-  width: 13px;
-  height: 13px;
-  accent-color: #4da6ff;
-}
-
-.checkbox-container label {
-  color: #2c3e50;
-  font-weight: 500;
-  font-size: 12px;
-}
-
-.forgot-link {
-  color: #4da6ff;
-  text-decoration: none;
-  font-weight: 600;
-  transition: color 0.3s;
-  font-size: 12px;
-}
-
-.forgot-link:hover {
-  color: #3399ff;
-  text-decoration: underline;
-}
-
 /* 提交按钮 */
 .submit-btn {
   width: 100%;
@@ -582,6 +545,7 @@ export default {
 .btn-icon {
   margin-right: 8px;
   font-size: 14px;
+  color: #ffffff;
 }
 
 /* 注册链接 */
@@ -602,36 +566,6 @@ export default {
 
 .switch-auth a:hover {
   text-decoration: underline;
-}
-
-/* 演示登录 */
-.demo-auth {
-  margin-top: 12px;
-  text-align: center;
-}
-
-.demo-btn {
-  background-color: rgba(255, 255, 255, 0.9);
-  color: #4da6ff;
-  border: 1.5px solid #dce4ec;
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
-  font-weight: 600;
-  width: 100%;
-}
-
-.demo-btn:hover {
-  background-color: white;
-  border-color: #4da6ff;
-  transform: translateY(-2px);
-  box-shadow: 0 5px 12px rgba(77, 166, 255, 0.15);
-}
-
-.register-link {
-  color: #4da6ff;
 }
 
 /* 滚动条样式 */

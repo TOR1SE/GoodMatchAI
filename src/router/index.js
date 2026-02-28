@@ -19,10 +19,12 @@ const LogisticsDetail = () => import('../pages/LogisticsDetail.vue')
 const UserCenterPage = () => import('../pages/UserCenterPage.vue')
 const AdminPage = () => import('../pages/AdminPage.vue')
 const AIAnalysisPage = () => import('../pages/AIAnalysisPage.vue')
+const DisasterPage = () => import('../pages/DisasterPage.vue')
 // 添加登录、注册页面和欢迎页
 const LoginPage = () => import('../pages/LoginPage.vue')
 const RegisterPage = () => import('../pages/RegisterPage.vue')
 const WelcomePage = () => import('../pages/WelcomePage.vue')
+const ResetPasswordPage = () => import('../pages/ResetPasswordPage.vue')
 
 const routes = [
   {
@@ -140,6 +142,12 @@ const routes = [
     component: AIAnalysisPage,
     meta: { requiresAuth: true }
   },
+  {
+    path: '/disaster',
+    name: 'DisasterPage',
+    component: DisasterPage,
+    meta: { requiresAuth: true }
+  },
   // 添加登录、注册和学生管理页面路由
   {
     path: '/login',
@@ -150,6 +158,11 @@ const routes = [
     path: '/register',
     name: 'RegisterPage',
     component: RegisterPage
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPasswordPage',
+    component: ResetPasswordPage
   }
 ]
 
@@ -162,24 +175,21 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
   
+  // 根路径强制重定向到欢迎页（首次进入必看欢迎页）
+  if (to.path === '/') {
+    next('/welcome')
+    return
+  }
+  
   // 如果路由需要认证但用户未登录，重定向到欢迎页
   if (to.meta.requiresAuth && !isLoggedIn) {
     next('/welcome')
-  } else if (to.path === '/') {
-    // 处理根路径重定向
-    if (isLoggedIn) {
-      next('/home')
-    } else {
-      next('/welcome')
-    }
-  } else {
-    // 如果已登录用户访问欢迎页、登录页或注册页，重定向到主页
-    if (isLoggedIn && (to.path === '/welcome' || to.path === '/login' || to.path === '/register')) {
-      next('/home')
-    } else {
-      next()
-    }
+    return
   }
+  
+  // 注意：登录页、欢迎页、注册页都不限制，让用户可以自由访问
+  // 已登录用户也可以访问欢迎页和登录页（方便切换账号）
+  next()
 })
 
 export default router

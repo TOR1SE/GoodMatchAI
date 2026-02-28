@@ -27,11 +27,9 @@
       <!-- 按钮容器 -->
       <div class="button-container">
         <button class="glass-button login-btn" @click="goToLogin">
-          <i class="fas fa-sign-in-alt button-icon"></i>
           用户登录
         </button>
         <button class="glass-button register-btn" @click="goToRegister">
-          <i class="fas fa-user-plus button-icon"></i>
           用户注册
         </button>
       </div>
@@ -91,6 +89,7 @@ export default {
   font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
 
+/* 主页面样式 */
 .home-page {
   width: 100vw;
   height: 100vh;
