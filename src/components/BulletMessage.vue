@@ -76,8 +76,7 @@ export default {
       // WebSocket 相关
       ws: null,
       wsConnected: false,
-      clientId: '',
-      heartbeatTimer: null
+      clientId: ''
     }
   },
   computed: {
@@ -316,21 +315,15 @@ export default {
       const wsUrl = 'ws://f3aeab96.xq0.cn:16368/api/v1/ws/boards'
       console.log('正在连接 WebSocket:', wsUrl)
 
-      // 从 localStorage 获取 token
-      const token = localStorage.getItem('accessToken')
+      // token 放在 cookie 中，浏览器会自动携带
+      // 不需要手动传递 token
       
-      // 使用 protocols 参数传递 token
-      // 格式: ['token', '实际的token值']
-      const protocols = token ? ['token', token] : []
-      
-      this.ws = new WebSocket(wsUrl, protocols)
+      this.ws = new WebSocket(wsUrl)
 
       this.ws.onopen = () => {
         console.log('WebSocket 连接成功')
         // 订阅当前分区
         this.subscribeSection(this.currentSectionId)
-        // 启动心跳
-        this.startHeartbeat()
       }
 
       this.ws.onmessage = (event) => {
@@ -350,7 +343,6 @@ export default {
         console.log('WebSocket 连接关闭')
         this.wsConnected = false
         this.clientId = ''
-        this.stopHeartbeat()
         // 3秒后尝试重连
         setTimeout(() => {
           if (!this.wsConnected) {
@@ -371,7 +363,7 @@ export default {
           }
         }
         this.ws.send(JSON.stringify(message))
-        console.log('已订阅分区:', sectionId || '全部')
+        console.log('发送订阅请求:', sectionId || '全部')
       }
     },
 
@@ -386,14 +378,14 @@ export default {
           console.log('WebSocket 已连接，client_id:', this.clientId)
           break
 
-        case 'new_message':
+        case 'board:created':
           // 收到新留言，添加到弹幕
           console.log('收到新留言:', data.payload)
           const newBullet = {
             id: data.payload.id,
             content: data.payload.description,
             time: Date.now(),
-            uid: data.payload.uid,
+            uid: data.payload.uId,
             section_id: data.payload.section_id
           }
           // 添加到 bullets 列表
@@ -402,16 +394,22 @@ export default {
           this.addBulletToScreen(newBullet)
           break
 
-        case 'message_updated':
+        case 'board:updated':
           // 留言被更新
           console.log('留言已更新:', data.payload)
           this.updateBulletInList(data.payload)
           break
 
-        case 'message_deleted':
+        case 'board:deleted':
           // 留言被删除
           console.log('留言已删除:', data.payload)
           this.removeBulletFromList(data.payload.id)
+          break
+
+        case 'subscribe_section_success':
+          // 订阅成功
+          console.log('订阅分区成功:', data.payload)
+          this.wsConnected = true
           break
 
         default:
@@ -433,26 +431,8 @@ export default {
       this.visibleBullets = this.visibleBullets.filter(b => b.id !== id)
     },
 
-    // 启动心跳
-    startHeartbeat() {
-      this.heartbeatTimer = setInterval(() => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'ping' }))
-        }
-      }, 30000) // 每30秒发送一次心跳
-    },
-
-    // 停止心跳
-    stopHeartbeat() {
-      if (this.heartbeatTimer) {
-        clearInterval(this.heartbeatTimer)
-        this.heartbeatTimer = null
-      }
-    },
-
     // 关闭 WebSocket
     closeWebSocket() {
-      this.stopHeartbeat()
       if (this.ws) {
         this.ws.close()
         this.ws = null
