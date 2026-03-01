@@ -322,8 +322,7 @@ export default {
 
       this.ws.onopen = () => {
         console.log('WebSocket 连接成功')
-        // 订阅当前分区
-        this.subscribeSection(this.currentSectionId)
+        // 等待 system:connected 消息后再发送认证
       }
 
       this.ws.onmessage = (event) => {
@@ -353,6 +352,26 @@ export default {
       }
     },
 
+    // 发送认证消息
+    sendAuthMessage() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        // 从 localStorage 获取 token
+        const token = localStorage.getItem('accessToken')
+        if (!token) {
+          console.error('没有 token，无法认证')
+          return
+        }
+        const message = {
+          type: 'auth',
+          payload: {
+            token: token
+          }
+        }
+        this.ws.send(JSON.stringify(message))
+        console.log('发送认证消息')
+      }
+    },
+
     // 订阅分区
     subscribeSection(sectionId) {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -374,8 +393,21 @@ export default {
       switch (data.type) {
         case 'system:connected':
           this.clientId = data.payload.client_id
-          this.wsConnected = true
           console.log('WebSocket 已连接，client_id:', this.clientId)
+          // 发送认证消息
+          this.sendAuthMessage()
+          break
+
+        case 'auth_success':
+          console.log('认证成功:', data.payload)
+          this.wsConnected = true
+          // 认证成功后订阅分区
+          this.subscribeSection(this.currentSectionId)
+          break
+
+        case 'auth_failed':
+          console.error('认证失败:', data.payload.message)
+          this.wsConnected = false
           break
 
         case 'board:created':
