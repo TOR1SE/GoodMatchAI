@@ -12,7 +12,7 @@
       <div class="bullet-screen" ref="bulletScreen">
         <div 
           v-for="bullet in visibleBullets" 
-          :key="bullet.id"
+          :key="bullet.displayId"
           class="bullet-item"
           :style="getBulletStyle(bullet)"
         >
@@ -43,7 +43,17 @@
 </template>
 
 <script>
-import { createBoardMessage, getBoardList, getBoardsBySection } from '../services/api.js'
+import { 
+  createBoardMessage, 
+  getBoardList, 
+  getBoardsBySection, 
+  getActiveSections, 
+  createSection,
+  getArticleList,
+  getArticleDetail,
+  createDisasterArea,
+  generateArticle
+} from '../services/api.js'
 
 export default {
   name: 'BulletMessage',
@@ -90,10 +100,17 @@ export default {
       this.loadBullets()
       this.visibleBullets = []
     },
-    sectionId() {
-      // 当分区ID变化时，重新加载弹幕（预留）
+    sectionId(newVal) {
+      // 当分区ID变化时，更新 currentSectionId 并重新加载
+      console.log('sectionId 变化:', newVal)
+      this.currentSectionId = newVal || ''
       this.loadBullets()
       this.visibleBullets = []
+      // 如果 WebSocket 已连接，重新订阅
+      if (this.wsConnected && this.currentSectionId) {
+        console.log('sectionId 变化，重新订阅分区:', this.currentSectionId)
+        this.subscribeSection(this.currentSectionId)
+      }
     },
     '$route.query.sectionId'(newVal) {
       // 当路由参数变化时，更新 sectionId 并重新加载
@@ -106,10 +123,16 @@ export default {
       }
     }
   },
-  mounted() {
-    // 从路由参数获取 sectionId
-    this.currentSectionId = this.$route.query.sectionId || ''
-    this.loadBullets()
+  async mounted() {
+    console.log('BulletMessage mounted, props:', { disasterId: this.disasterId, disasterName: this.disasterName, sectionId: this.sectionId })
+    console.log('sectionId 值:', this.sectionId, '是否为空:', !this.sectionId)
+    
+    // 使用 props 传入的 sectionId（由父组件 DisasterPage 统一管理）
+    this.currentSectionId = this.sectionId || ''
+    console.log('使用 props 传入的 sectionId:', this.currentSectionId)
+    
+    // 先加载弹幕数据，再启动动画
+    await this.loadBullets()
     this.startBulletAnimation()
     // 页面加载后立即显示3条弹幕
     this.showInitialBullets()
@@ -122,18 +145,62 @@ export default {
     this.closeWebSocket()
   },
   methods: {
+    // 获取或创建区块
+    async getOrCreateSection() {
+      try {
+        console.log('获取活跃区块列表...')
+        const res = await getActiveSections()
+        
+        if (res.success && res.data && res.data.length > 0) {
+          // 尝试根据灾区名称匹配区块
+          const matchedSection = res.data.find(section => 
+            section.name === this.disasterName || 
+            section.name.includes(this.disasterName)
+          )
+          
+          if (matchedSection) {
+            console.log('找到匹配的区块:', matchedSection.name, matchedSection.id)
+            this.currentSectionId = matchedSection.id
+          } else {
+            // 没有找到匹配的，使用第一个或创建新的
+            console.log('未找到匹配区块，使用第一个:', res.data[0].name)
+            this.currentSectionId = res.data[0].id
+          }
+        } else {
+          // 没有活跃区块，创建一个新的
+          console.log('没有活跃区块，创建新区块:', this.disasterName)
+          const createRes = await createSection({
+            name: this.disasterName,
+            description: `${this.disasterName}留言墙`
+          })
+          
+          if (createRes.success) {
+            console.log('创建区块成功:', createRes.data.id)
+            this.currentSectionId = createRes.data.id
+          } else {
+            console.error('创建区块失败:', createRes.message)
+            this.currentSectionId = ''
+          }
+        }
+      } catch (error) {
+        console.error('获取或创建区块失败:', error)
+        this.currentSectionId = ''
+      }
+    },
+    
     async loadBullets() {
       try {
-        let res
-        
-        // 如果有 sectionId，获取对应灾区的留言；否则获取全部留言
-        if (this.currentSectionId) {
-          console.log('根据 sectionId 获取留言:', this.currentSectionId)
-          res = await getBoardsBySection(this.currentSectionId)
-        } else {
-          console.log('获取全部留言')
-          res = await getBoardList('', '', 1, 50)
+        // 没有 sectionId 时不加载留言
+        if (!this.currentSectionId) {
+          console.log('没有 sectionId，不加载留言')
+          this.bullets = []
+          return
         }
+        
+        console.log('根据 sectionId 获取分区留言:', this.currentSectionId)
+        const res = await getBoardsBySection(this.currentSectionId)
+        
+        console.log('获取留言返回:', res)
         
         if (res.success && res.data && res.data.list) {
           this.bullets = res.data.list.map(item => ({
@@ -144,6 +211,9 @@ export default {
             section_id: item.section_id
           }))
           console.log('加载留言成功:', this.bullets.length, '条')
+        } else {
+          console.log('返回数据格式不对:', res)
+          this.bullets = []
         }
       } catch (error) {
         console.error('加载留言失败:', error)
@@ -167,14 +237,13 @@ export default {
         const res = await createBoardMessage(messageData)
         
         if (res.success) {
-          // 创建成功后，重新加载列表
-          await this.loadBullets()
-          
-          // 将新留言添加到屏幕
+          // 创建成功后，本地显示新留言
+          // 注意：不需要重新加载列表，WebSocket 会广播给所有用户
           const newBullet = {
             id: res.data.id,
             content: this.message.trim(),
-            time: Date.now()
+            time: Date.now(),
+            section_id: this.currentSectionId
           }
           this.addBulletToScreen(newBullet)
           
@@ -268,7 +337,7 @@ export default {
         
         this.visibleBullets = this.visibleBullets.filter(bullet => bullet.left > -50)
         
-        if (Math.random() < 0.008 && this.bullets.length > 0) {
+        if (Math.random() < 0.004 && this.bullets.length > 0) {
           const randomBullet = this.bullets[Math.floor(Math.random() * this.bullets.length)]
           this.addBulletToScreen(randomBullet)
         }
@@ -401,8 +470,13 @@ export default {
         case 'auth_success':
           console.log('认证成功:', data.payload)
           this.wsConnected = true
-          // 认证成功后订阅分区
-          this.subscribeSection(this.currentSectionId)
+          // 认证成功后订阅分区（只有 sectionId 不为空时才订阅）
+          if (this.currentSectionId) {
+            console.log('认证成功，准备订阅分区:', this.currentSectionId)
+            this.subscribeSection(this.currentSectionId)
+          } else {
+            console.log('认证成功，但 currentSectionId 为空，暂不订阅')
+          }
           break
 
         case 'auth_failed':
@@ -411,8 +485,16 @@ export default {
           break
 
         case 'board:created':
-          // 收到新留言，添加到弹幕
+          // 收到新留言，检查是否属于当前分区
           console.log('收到新留言:', data.payload)
+          console.log('当前分区:', this.currentSectionId, '留言分区:', data.payload.section_id)
+          
+          // 如果当前有指定分区，只显示该分区的消息
+          if (this.currentSectionId && data.payload.section_id !== this.currentSectionId) {
+            console.log('该留言不属于当前分区，跳过显示')
+            return
+          }
+          
           const newBullet = {
             id: data.payload.id,
             content: data.payload.description,

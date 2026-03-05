@@ -61,7 +61,10 @@
         </tbody>
       </table>
       
-      <div v-if="filteredLogistics.length === 0" class="no-results">
+      <div v-if="loading" class="no-results">
+        加载中...
+      </div>
+      <div v-else-if="filteredLogistics.length === 0" class="no-results">
         暂无物流信息
       </div>
     </div>
@@ -77,99 +80,30 @@
 </template>
 
 <script>
+import { getLogisticsList } from '../services/api.js'
+
 export default {
   name: 'LogisticsList',
   data() {
     return {
-      logisticsList: [
-        {
-          id: 201,
-          trackingNumber: 'YT9876543210',
-          materialName: '矿泉水',
-          quantity: 1000,
-          unit: '箱',
-          carrier: '圆通快递',
-          status: 'transporting',
-          currentLocation: '运输中 - 成都中转站',
-          estimatedDelivery: '2024-05-26 12:00',
-          startLocation: '北京市朝阳区',
-          destination: '四川省雅安市',
-          donationId: 1001,
-          demandId: 2001
-        },
-        {
-          id: 202,
-          trackingNumber: 'SF1234567890',
-          materialName: '帐篷',
-          quantity: 400,
-          unit: '顶',
-          carrier: '顺丰速运',
-          status: 'pending',
-          currentLocation: '等待发货',
-          estimatedDelivery: '2024-05-28 18:00',
-          startLocation: '上海市浦东新区',
-          destination: '云南省昭通市',
-          donationId: 1002,
-          demandId: 2002
-        },
-        {
-          id: 203,
-          trackingNumber: 'JD7890123456',
-          materialName: '方便面',
-          quantity: 1500,
-          unit: '箱',
-          carrier: '京东物流',
-          status: 'delivered',
-          currentLocation: '已送达 - 河南灾区',
-          estimatedDelivery: '2024-05-24 08:00',
-          startLocation: '广州市天河区',
-          destination: '河南省郑州市',
-          donationId: 1003,
-          demandId: 2003
-        },
-        {
-          id: 204,
-          trackingNumber: 'ZT4567890123',
-          materialName: '药品',
-          quantity: 250,
-          unit: '箱',
-          carrier: '中通快递',
-          status: 'received',
-          currentLocation: '已签收 - 贵州灾区',
-          estimatedDelivery: '2024-05-25 14:00',
-          startLocation: '深圳市南山区',
-          destination: '贵州省毕节市',
-          donationId: 1004,
-          demandId: 2004
-        },
-        {
-          id: 205,
-          trackingNumber: 'YTO3210987654',
-          materialName: '棉被',
-          quantity: 600,
-          unit: '床',
-          carrier: '圆通快递',
-          status: 'transporting',
-          currentLocation: '运输中 - 西宁中转站',
-          estimatedDelivery: '2024-05-27 10:00',
-          startLocation: '杭州市西湖区',
-          destination: '西藏自治区昌都市',
-          donationId: 1005,
-          demandId: 2005
-        }
-      ],
+      logisticsList: [],
       searchQuery: '',
       filterStatus: '',
       currentPage: 1,
       itemsPerPage: 10,
+      loading: false,
       statusMap: {
         pending: '待发货',
         transporting: '运输中',
         delivered: '已送达',
         received: '已签收',
+        arrived: '已到达',
         cancelled: '已取消'
       }
     }
+  },
+  mounted() {
+    this.loadLogisticsList()
   },
   computed: {
     filteredLogistics() {
@@ -213,13 +147,50 @@ export default {
     }
   },
   methods: {
+    async loadLogisticsList() {
+      this.loading = true
+      try {
+        const res = await getLogisticsList(this.filterStatus, this.currentPage, this.itemsPerPage)
+        console.log('获取物流列表:', res)
+        
+        if (res.success && res.data && res.data.list) {
+          // 映射后端数据到前端格式
+          this.logisticsList = res.data.list.map(item => ({
+            id: item.id,
+            trackingNumber: item.tracking_number || '-',
+            materialName: item.material_name || '-',
+            quantity: item.quantity || 0,
+            unit: item.unit || '件',
+            carrier: item.logistics_company || '-',
+            status: item.status || 'pending',
+            currentLocation: item.current_location || '-',
+            estimatedDelivery: item.eta ? new Date(item.eta).toLocaleString() : '-',
+            startLocation: item.start_location || '-',
+            destination: item.destination || '-',
+            donationId: item.donation_id,
+            demandId: item.demand_id
+          }))
+          console.log('物流列表加载成功:', this.logisticsList.length, '条')
+        } else {
+          console.log('获取物流列表失败:', res.message)
+          this.logisticsList = []
+        }
+      } catch (error) {
+        console.error('获取物流列表出错:', error)
+        this.logisticsList = []
+      } finally {
+        this.loading = false
+      }
+    },
     applyFilters() {
-      this.currentPage = 1;
+      this.currentPage = 1
+      this.loadLogisticsList()
     },
     resetFilters() {
-      this.searchQuery = '';
-      this.filterStatus = '';
-      this.currentPage = 1;
+      this.searchQuery = ''
+      this.filterStatus = ''
+      this.currentPage = 1
+      this.loadLogisticsList()
     }
   }
 }
@@ -327,6 +298,11 @@ export default {
 .status-badge.cancelled {
   background-color: #f8d7da;
   color: #721c24;
+}
+
+.status-badge.arrived {
+  background-color: #e2d4f0;
+  color: #6b2c91;
 }
 
 .no-results {

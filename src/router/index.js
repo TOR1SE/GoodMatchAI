@@ -111,6 +111,7 @@ const routes = [
     name: 'LogisticsPage',
     component: LogisticsPage,
     meta: { requiresAuth: true },
+    redirect: '/logistics/list',
     children: [
       {
         path: 'list',

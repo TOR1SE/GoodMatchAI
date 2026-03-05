@@ -103,7 +103,8 @@
           <!-- 暖心留言墙 -->
           <BulletMessage 
             :disasterId="currentArea.id" 
-            :disasterName="currentArea.name" 
+            :disasterName="currentArea.name"
+            :sectionId="currentSectionId"
           />
 
           <img :src="currentArea.detailImage || currentArea.image" :alt="currentArea.name" class="detail-image">
@@ -134,6 +135,20 @@
             </div>
             <div class="section-content">
               <p>{{ currentArea.fullDescription }}</p>
+            </div>
+          </div>
+
+          <!-- 文章详情 -->
+          <div class="section" v-if="currentArticle">
+            <div class="section-header">
+              <div class="section-icon">📄</div>
+              <h2 class="section-title">{{ currentArticle.title }}</h2>
+            </div>
+            <div class="section-content">
+              <div class="article-meta" v-if="currentArticle.create_time">
+                <span class="article-date">{{ new Date(currentArticle.create_time).toLocaleDateString() }}</span>
+              </div>
+              <p class="article-content">{{ currentArticle.content }}</p>
             </div>
           </div>
 
@@ -270,6 +285,7 @@
 <script>
 import BulletMessage from '../components/BulletMessage.vue'
 import ImageUploader from '../components/ImageUploader.vue'
+import { getArticleList, getArticleDetail, createDisasterArea, generateArticle } from '../services/api.js'
 
 export default {
   name: 'DisasterPage',
@@ -291,6 +307,8 @@ export default {
         { amount: 500, description: '支持临时住所' },
         { amount: 1000, description: '帮助孩子继续上学' }
       ],
+      currentArticle: null, // 当前灾区的文章
+      currentSectionId: '', // 当前文章的 section_id
       disasterAreas: [
         {
           id: 1,
@@ -397,7 +415,129 @@ export default {
       this.currentArea = area;
       this.currentView = 'detail';
       window.scrollTo(0, 0);
+      // 获取当前灾区的文章
+      this.loadArticleForCurrentArea();
     },
+
+    // 获取当前灾区的文章
+    async loadArticleForCurrentArea() {
+      try {
+        console.log('获取当前灾区的文章...');
+        console.log('当前灾区:', this.currentArea?.name);
+        this.currentArticle = null;
+        this.currentSectionId = '';
+
+        // 1. 获取文章列表
+        const listRes = await getArticleList(1, 20);
+        console.log('文章列表:', listRes);
+
+        if (!listRes.success || !listRes.data || !listRes.data.list || listRes.data.list.length === 0) {
+          console.log('没有获取到文章列表，使用写死的文章...');
+          // 使用写死的文章数据
+          this.currentArticle = {
+            id: 999,
+            title: '汶川震区重建：希望之路',
+            content: '2008年5月12日，汶川发生了里氏8.0级特大地震，给当地人民生命财产造成了巨大损失。多年来，在全国人民的关心和支持下，汶川震区重建工作取得了显著成效。\n\n如今，新的城镇拔地而起，学校、医院等公共设施焕然一新。受灾群众住进了安全舒适的新居，孩子们在新教室里快乐学习。\n\n但重建之路依然漫长，一些家庭仍在努力恢复生产生活，需要社会各界的持续关注和支持。让我们携手同行，为汶川的明天贡献一份力量。',
+            create_time: '2024-01-01T00:00:00Z',
+            section_id: '2579a9a1-ab35-4e65-8143-88055d0523ed'
+          };
+          this.currentSectionId = '2579a9a1-ab35-4e65-8143-88055d0523ed';
+          console.log('使用写死的文章:', this.currentArticle.title);
+          console.log('使用写死的 section_id:', this.currentSectionId);
+          return;
+        }
+
+        console.log('文章数量:', listRes.data.list.length);
+        console.log('文章标题列表:', listRes.data.list.map(a => a.title));
+
+        // 2. 根据灾区名称匹配文章
+        const matchedArticle = listRes.data.list.find(article =>
+          article.title && article.title.includes(this.currentArea.name)
+        );
+
+        if (matchedArticle) {
+          console.log('找到匹配的文章:', matchedArticle.id, matchedArticle.title);
+
+          // 3. 获取文章详情
+          const detailRes = await getArticleDetail(matchedArticle.id);
+          console.log('文章详情:', detailRes);
+
+          if (detailRes.success && detailRes.data) {
+            this.currentArticle = detailRes.data;
+            // 提取 section_id
+            this.currentSectionId = detailRes.data.section_id || '';
+            console.log('文章加载成功:', this.currentArticle.title);
+            console.log('获取到 section_id:', this.currentSectionId);
+          } else {
+            console.log('文章详情获取失败');
+          }
+        } else {
+          console.log('没有找到匹配当前灾区的文章，使用写死的文章...');
+          // 使用写死的文章数据
+          this.currentArticle = {
+            id: 999,
+            title: '汶川震区重建：希望之路',
+            content: '2008年5月12日，汶川发生了里氏8.0级特大地震，给当地人民生命财产造成了巨大损失。多年来，在全国人民的关心和支持下，汶川震区重建工作取得了显著成效。\n\n如今，新的城镇拔地而起，学校、医院等公共设施焕然一新。受灾群众住进了安全舒适的新居，孩子们在新教室里快乐学习。\n\n但重建之路依然漫长，一些家庭仍在努力恢复生产生活，需要社会各界的持续关注和支持。让我们携手同行，为汶川的明天贡献一份力量。',
+            create_time: '2024-01-01T00:00:00Z',
+            section_id: '2579a9a1-ab35-4e65-8143-88055d0523ed'
+          };
+          this.currentSectionId = '2579a9a1-ab35-4e65-8143-88055d0523ed';
+          console.log('使用写死的文章:', this.currentArticle.title);
+          console.log('使用写死的 section_id:', this.currentSectionId);
+        }
+      } catch (error) {
+        console.error('获取文章失败:', error);
+      }
+    },
+
+    // 为当前灾区创建文章
+    async createArticleForCurrentArea() {
+      try {
+        console.log('为当前灾区创建文章...');
+
+        // 1. 先创建灾区
+        const disasterData = {
+          name: this.currentArea.name,
+          location: this.currentArea.location || '未知位置',
+          description: this.currentArea.description || `${this.currentArea.name}需要帮助`,
+          severity: 1,
+          affected_population: this.currentArea.affectedPeople || 0,
+          status: 'active'
+        };
+
+        console.log('创建灾区:', disasterData);
+        const disasterRes = await createDisasterArea(disasterData);
+        console.log('创建灾区结果:', disasterRes);
+
+        if (!disasterRes.success || !disasterRes.data || !disasterRes.data.id) {
+          console.error('创建灾区失败');
+          return;
+        }
+
+        const disasterAreaId = disasterRes.data.id;
+        console.log('灾区ID:', disasterAreaId);
+
+        // 2. 生成文章
+        const articleData = {
+          disaster_area_id: disasterAreaId,
+          prompt: `为${this.currentArea.name}生成一篇关怀文章，介绍灾区情况和救援进展，表达对灾区人民的关心和支持`
+        };
+
+        console.log('生成文章:', articleData);
+        const articleRes = await generateArticle(articleData);
+        console.log('生成文章结果:', articleRes);
+
+        if (articleRes.success && articleRes.data) {
+          console.log('文章创建成功:', articleRes.data);
+          this.currentArticle = articleRes.data;
+        } else {
+          console.error('文章创建失败:', articleRes.message);
+        }
+      } catch (error) {
+        console.error('创建文章失败:', error);
+      }
+    },
+
     showDonate(area) {
       this.donateArea = area;
       this.currentView = 'donate';

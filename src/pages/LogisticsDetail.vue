@@ -135,75 +135,111 @@
 </template>
 
 <script>
+import { getLogisticsDetail } from '../services/api.js'
+
 export default {
   name: 'LogisticsDetail',
   data() {
     return {
       logisticsDetail: {
-        id: 201,
-        trackingNumber: 'YT9876543210',
-        materialName: '矿泉水',
-        quantity: 1000,
-        unit: '箱',
-        carrier: '圆通快递',
-        status: 'transporting',
-        currentLocation: '运输中 - 成都中转站',
-        estimatedDelivery: '2024-05-26 12:00',
-        startLocation: '北京市朝阳区',
-        destination: '四川省雅安市',
-        donationId: 1001,
-        demandId: 2001,
+        id: '',
+        trackingNumber: '-',
+        materialName: '-',
+        quantity: 0,
+        unit: '件',
+        carrier: '-',
+        status: 'pending',
+        currentLocation: '-',
+        estimatedDelivery: '-',
+        startLocation: '-',
+        destination: '-',
+        donationId: '',
+        demandId: '',
         donorInfo: {
-          donorName: '爱心基金会',
-          contactName: '张经理',
-          contactPhone: '13800138001',
-          address: '北京市朝阳区建国路88号'
+          donorName: '-',
+          contactName: '-',
+          contactPhone: '-',
+          address: '-'
         },
         demandInfo: {
-          demandName: '四川地震灾区',
-          contactName: '王救援',
-          contactPhone: '13800138002',
-          address: '四川省雅安市芦山县'
+          demandName: '-',
+          contactName: '-',
+          contactPhone: '-',
+          address: '-'
         },
-        trackingRecords: [
-          {
-            time: '2024-05-23 10:00',
-            content: '您的包裹已由圆通快递揽收，单号：YT9876543210'
-          },
-          {
-            time: '2024-05-23 18:00',
-            content: '您的包裹已到达北京中转站'
-          },
-          {
-            time: '2024-05-24 06:00',
-            content: '您的包裹已发出，正在运往成都中转站'
-          },
-          {
-            time: '2024-05-25 12:00',
-            content: '您的包裹已到达成都中转站，正在分拣'
-          },
-          {
-            time: '2024-05-25 18:00',
-            content: '您的包裹已发出，正在运往雅安市'
-          }
-        ]
+        trackingRecords: []
       },
+      loading: false,
       statusMap: {
         pending: '待发货',
         transporting: '运输中',
         delivered: '已送达',
         received: '已签收',
+        arrived: '已到达',
         cancelled: '已取消'
       }
     }
   },
   mounted() {
-    const logisticsId = this.$route.params.id;
-    console.log('获取物流详情，ID:', logisticsId);
+    this.loadLogisticsDetail()
   },
   methods: {
+    async loadLogisticsDetail() {
+      const logisticsId = this.$route.params.id
+      console.log('获取物流详情，ID:', logisticsId)
+      
+      if (!logisticsId) {
+        console.error('物流ID为空')
+        return
+      }
+      
+      this.loading = true
+      try {
+        const res = await getLogisticsDetail(logisticsId)
+        console.log('物流详情返回:', res)
+        
+        if (res.success && res.data) {
+          const data = res.data
+          this.logisticsDetail = {
+            id: data.id,
+            trackingNumber: data.tracking_number || '-',
+            materialName: data.material_name || '-',
+            quantity: data.quantity || 0,
+            unit: data.unit || '件',
+            carrier: data.logistics_company || '-',
+            status: data.status || 'pending',
+            currentLocation: data.current_location || '-',
+            estimatedDelivery: data.eta ? new Date(data.eta).toLocaleString() : '-',
+            startLocation: data.start_location || '-',
+            destination: data.destination || '-',
+            donationId: data.donation_id,
+            demandId: data.demand_id,
+            donorInfo: {
+              donorName: data.donor_name || '-',
+              contactName: data.donor_contact_name || '-',
+              contactPhone: data.donor_contact_phone || '-',
+              address: data.donor_address || '-'
+            },
+            demandInfo: {
+              demandName: data.demand_name || '-',
+              contactName: data.demand_contact_name || '-',
+              contactPhone: data.demand_contact_phone || '-',
+              address: data.demand_address || '-'
+            },
+            trackingRecords: data.tracking_records || []
+          }
+          console.log('物流详情加载成功')
+        } else {
+          console.error('获取物流详情失败:', res.message)
+        }
+      } catch (error) {
+        console.error('获取物流详情出错:', error)
+      } finally {
+        this.loading = false
+      }
+    },
     goBack() {
-      this.$router.go(-1);
+      this.$router.go(-1)
     }
   }
 }
@@ -328,6 +364,11 @@ export default {
 .status-badge.cancelled {
   background-color: #f8d7da;
   color: #721c24;
+}
+
+.status-badge.arrived {
+  background-color: #e2d4f0;
+  color: #6b2c91;
 }
 
 .tracking-record {

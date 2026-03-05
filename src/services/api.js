@@ -8,7 +8,8 @@ const apiClient = axios.create({
   timeout: 10000, // 请求超时时间
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true // 允许携带cookie
 })
 
 // 是否正在刷新token
@@ -138,6 +139,52 @@ export const login = async (account, password, captcha_id, captcha_value) => {
     password,
     captcha_id,
     captcha_value
+  });
+};
+
+// ==================== 灾区文章接口 ====================
+
+// 获取文章列表
+export const getArticleList = async (page = 1, page_size = 10) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get('/disaster-areas/articles', {
+    params: {
+      page,
+      page_size
+    },
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 获取文章详情
+export const getArticleDetail = async (id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/disaster-areas/articles/${id}`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 创建灾区
+export const createDisasterArea = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/disaster-areas', data, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// AI生成文章
+export const generateArticle = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/matches/generate-article', data, {
+    headers: {
+      'token': token
+    }
   });
 };
 
@@ -500,6 +547,97 @@ export const updateDonationStatus = async (donation_id, status) => {
     donation_id,
     status
   }, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// ==================== 物流接口 ====================
+
+// 查询物流列表
+export const getLogisticsList = async (status = '', page = 1, page_size = 10) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get('/logistics', {
+    params: {
+      status,
+      page,
+      page_size
+    },
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 获取物流详情（根据物流ID）
+export const getLogisticsDetail = async (id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/logistics/${id}`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 根据匹配ID查询物流信息
+export const getLogisticsByMatchId = async (match_id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/logistics/match/${match_id}`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 创建物流
+export const createLogistics = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/logistics', data, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 更新发货信息
+export const updateLogisticsShip = async (id, shipData) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.put(`/logistics/${id}/ship`, shipData, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 更新物流状态
+export const updateLogisticsStatus = async (id, status) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.put(`/logistics/${id}/status`, {
+    status
+  }, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 确认收货
+export const confirmLogisticsArrival = async (id, arrival_time) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post(`/logistics/${id}/arrival`, {
+    arrival_time
+  }, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 通知物流
+export const notifyLogistics = async (match_id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post(`/logistics/match/${match_id}/notify`, {}, {
     headers: {
       'token': token
     }
