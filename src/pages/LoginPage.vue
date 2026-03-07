@@ -130,7 +130,7 @@
 </template>
 
 <script>
-import { login, getCaptcha } from '../services/api.js'
+import { login, getCaptcha, getUserInfo } from '../services/api.js'
 
 export default {
   name: 'LoginPage',
@@ -228,6 +228,17 @@ export default {
           localStorage.setItem('accessToken', access_token);
           localStorage.setItem('refreshToken', refresh_token);
           localStorage.setItem('isLoggedIn', 'true');
+          
+          // 获取并保存用户信息
+          try {
+            const userRes = await getUserInfo();
+            if (userRes.success && userRes.data) {
+              localStorage.setItem('userId', userRes.data.id);
+              localStorage.setItem('userName', userRes.data.uname);
+            }
+          } catch (e) {
+            console.error('获取用户信息失败:', e);
+          }
           
           // 如果选择记住登录状态
           if (this.loginForm.remember) {

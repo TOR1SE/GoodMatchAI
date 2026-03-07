@@ -8,7 +8,7 @@
       </div>
       <ul class="navbar-nav">
         <li class="nav-item">
-          <router-link to="/" class="nav-link" active-class="active">首页</router-link>
+          <router-link to="/home" class="nav-link" active-class="active">首页</router-link>
         </li>
         <li class="nav-item">
           <router-link to="/donation/list" class="nav-link" active-class="active">捐赠物资</router-link>

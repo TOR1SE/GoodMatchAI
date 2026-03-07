@@ -146,6 +146,45 @@
             </div>
           </div>
 
+          <!-- 评价弹窗 -->
+          <div v-if="showEvaluationModal" class="modal-overlay" @click="closeEvaluationModal">
+            <div class="modal-content" @click.stop>
+              <div class="modal-header">
+                <h3>发布评价</h3>
+                <button class="modal-close" @click="closeEvaluationModal">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label>物资：{{ currentEvaluationItem.materialName }}</label>
+                </div>
+                <div class="form-group">
+                  <label>评分（1-5星）</label>
+                  <div class="star-rating">
+                    <span 
+                      v-for="star in 5" 
+                      :key="star"
+                      :class="['star', { active: star <= evaluationForm.score }]"
+                      @click="evaluationForm.score = star"
+                    >★</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>评价内容</label>
+                  <textarea 
+                    v-model="evaluationForm.content" 
+                    placeholder="请输入评价内容"
+                    rows="4"
+                  ></textarea>
+                </div>
+                <div v-if="evaluationError" class="error-text">{{ evaluationError }}</div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-secondary" @click="closeEvaluationModal">取消</button>
+                <button class="btn btn-primary" @click="submitEvaluation" :disabled="!evaluationForm.score">提交评价</button>
+              </div>
+            </div>
+          </div>
+
           <div class="tabs-section">
             <div class="tabs">
               <button 
@@ -286,6 +325,41 @@
                   暂无匹配记录
                 </div>
               </div>
+
+              <!-- 待评价 -->
+              <div v-if="activeTab === 'evaluations'" class="tab-panel">
+                <h3>待评价</h3>
+                <div v-if="loadingEvaluations" class="no-records">
+                  加载中...
+                </div>
+                <div v-else class="table-container">
+                  <table class="record-table">
+                    <thead>
+                      <tr>
+                        <th>物流ID</th>
+                        <th>物资名称</th>
+                        <th>数量</th>
+                        <th>到达时间</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in pendingEvaluations" :key="item.id">
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.materialName }}</td>
+                        <td>{{ item.quantity }} {{ item.unit }}</td>
+                        <td>{{ item.arrivalTime }}</td>
+                        <td>
+                          <button class="btn btn-sm btn-primary" @click="openEvaluationModal(item)">去评价</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-if="!loadingEvaluations && pendingEvaluations.length === 0" class="no-records">
+                  暂无待评价
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -295,7 +369,7 @@
 </template>
 
 <script>
-import { getUserInfo, updateUserInfo, updatePassword, deleteUser } from '../services/api.js'
+import { getUserInfo, updateUserInfo, updatePassword, deleteUser, getLogisticsList, getEvaluationByMatchId, createEvaluation, createDefaultEvaluation } from '../services/api.js'
 
 export default {
   name: 'UserCenterPage',
@@ -356,8 +430,12 @@ export default {
       tabs: [
         { label: '我的捐赠', value: 'donations' },
         { label: '我的需求', value: 'demands' },
-        { label: '我的匹配', value: 'matchings' }
+        { label: '我的匹配', value: 'matchings' },
+        { label: '待评价', value: 'evaluations' }
       ],
+      // 待评价列表
+      pendingEvaluations: [],
+      loadingEvaluations: false,
 
       statusMap: {
         pending: '待审核',
@@ -392,11 +470,20 @@ export default {
       },
       // 删除账号弹窗
       showDeleteModal: false,
-      deleteConfirmText: ''
+      deleteConfirmText: '',
+      // 评价弹窗
+      showEvaluationModal: false,
+      currentEvaluationItem: {},
+      evaluationForm: {
+        score: 0,
+        content: ''
+      },
+      evaluationError: ''
     }
   },
   mounted() {
     this.loadUserInfo();
+    this.loadPendingEvaluations();
   },
   methods: {
     getMatchDegreeClass(degree) {
@@ -577,6 +664,116 @@ export default {
         }
       } catch (error) {
         alert(error.message || '删除账号失败');
+      }
+    },
+    // 评价相关方法
+    async loadPendingEvaluations() {
+      this.loadingEvaluations = true;
+      try {
+        // 获取已到达的物流列表
+        const res = await getLogisticsList('arrived', 1, 100);
+        if (res.success && res.data && res.data.list) {
+          const arrivedLogistics = res.data.list;
+          
+          // 过滤出未评价的物流
+          const pendingList = [];
+          for (const item of arrivedLogistics) {
+            try {
+              // 查询该物流是否已有评价
+              const evalRes = await getEvaluationByMatchId(item.match_id);
+              if (!evalRes.success || !evalRes.data) {
+                // 没有评价，加入待评价列表
+                pendingList.push({
+                  id: item.id,
+                  matchId: item.match_id,
+                  materialName: item.material_name || '-',
+                  quantity: item.quantity || 0,
+                  unit: item.unit || '件',
+                  arrivalTime: item.eta ? new Date(item.eta).toLocaleString() : '-',
+                  disasterAreaId: item.disaster_area_id
+                });
+              }
+            } catch (e) {
+              // 查询失败，假设没有评价
+              pendingList.push({
+                id: item.id,
+                matchId: item.match_id,
+                materialName: item.material_name || '-',
+                quantity: item.quantity || 0,
+                unit: item.unit || '件',
+                arrivalTime: item.eta ? new Date(item.eta).toLocaleString() : '-',
+                disasterAreaId: item.disaster_area_id
+              });
+            }
+          }
+          this.pendingEvaluations = pendingList;
+        }
+      } catch (error) {
+        console.error('加载待评价列表失败:', error);
+      } finally {
+        this.loadingEvaluations = false;
+      }
+    },
+    openEvaluationModal(item) {
+      // 检查是否超过7天
+      const arrivalTime = new Date(item.arrivalTime);
+      const now = new Date();
+      const daysDiff = (now - arrivalTime) / (1000 * 60 * 60 * 24);
+      
+      if (daysDiff > 7) {
+        // 超过7天，创建默认评价
+        if (confirm('该物资已到达超过7天，将使用系统默认评价，是否继续？')) {
+          this.createDefaultEval(item);
+        }
+        return;
+      }
+      
+      this.currentEvaluationItem = item;
+      this.evaluationForm = { score: 0, content: '' };
+      this.evaluationError = '';
+      this.showEvaluationModal = true;
+    },
+    closeEvaluationModal() {
+      this.showEvaluationModal = false;
+      this.currentEvaluationItem = {};
+      this.evaluationForm = { score: 0, content: '' };
+      this.evaluationError = '';
+    },
+    async submitEvaluation() {
+      if (!this.evaluationForm.score) {
+        this.evaluationError = '请选择评分';
+        return;
+      }
+      
+      try {
+        const res = await createEvaluation({
+          match_id: this.currentEvaluationItem.matchId,
+          disaster_area_id: this.currentEvaluationItem.disasterAreaId,
+          score: this.evaluationForm.score,
+          content: this.evaluationForm.content || '用户未填写评价内容',
+          tags: [],
+          evaluator_id: localStorage.getItem('userId') || '1',
+          evaluator_name: this.userInfo.realName || this.userInfo.username
+        });
+        
+        if (res.success) {
+          alert('评价提交成功！');
+          this.closeEvaluationModal();
+          this.loadPendingEvaluations(); // 刷新列表
+        }
+      } catch (error) {
+        this.evaluationError = error.message || '提交评价失败';
+      }
+    },
+    async createDefaultEval(item) {
+      try {
+        const res = await createDefaultEvaluation(item.matchId, item.disasterAreaId);
+        if (res.success) {
+          alert('已生成默认评价');
+          this.loadPendingEvaluations(); // 刷新列表
+        }
+      } catch (error) {
+        alert('生成默认评价失败: ' + error.message);
       }
     }
   }
@@ -1019,5 +1216,41 @@ export default {
 
 .warning-text i {
   font-size: 18px;
+}
+
+/* 星级评分样式 */
+.star-rating {
+  display: flex;
+  gap: 8px;
+  font-size: 28px;
+}
+
+.star {
+  cursor: pointer;
+  color: #ddd;
+  transition: color 0.2s;
+}
+
+.star.active {
+  color: #ffc107;
+}
+
+.star:hover {
+  color: #ffc107;
+}
+
+.modal-body textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.modal-body textarea:focus {
+  outline: none;
+  border-color: #007bff;
 }
 </style>

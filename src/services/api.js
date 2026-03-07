@@ -643,3 +643,112 @@ export const notifyLogistics = async (match_id) => {
     }
   });
 };
+
+// ==================== 评价接口 ====================
+
+// 创建评价
+export const createEvaluation = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/evaluations/create', data, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 创建默认评价
+export const createDefaultEvaluation = async (match_id, disaster_area_id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post(`/evaluations/match/${match_id}/default?disaster_area_id=${disaster_area_id}`, {}, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 根据评价ID获取评价信息
+export const getEvaluationById = async (id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/evaluations/${id}`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 根据匹配ID获取评价信息
+export const getEvaluationByMatchId = async (match_id) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/evaluations/match/${match_id}`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 获取评价统计
+export const getEvaluationStatistics = async () => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get('/evaluations/statistics', {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// ==================== AI对话接口 ====================
+
+// 创建会话
+export const createConversation = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/conversations', data, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 发送消息
+export const sendChatMessage = async (data) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.post('/conversations/chat', data, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 获取会话消息列表
+export const getConversationMessages = async (conversationId) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get(`/conversations/${conversationId}/messages`, {
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 获取用户对话列表
+export const getUserConversations = async (userId, page = 1, pageSize = 10) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.get('/conversations/user/list', {
+    params: {
+      user_id: userId,
+      page,
+      page_size: pageSize
+    },
+    headers: {
+      'token': token
+    }
+  });
+};
+
+// 删除会话
+export const deleteConversation = async (conversationId) => {
+  const token = localStorage.getItem('accessToken')
+  return apiClient.delete(`/conversations/${conversationId}`, {
+    headers: {
+      'token': token
+    }
+  });
+};

@@ -267,6 +267,12 @@
             <div class="msg-avatar" v-else><i class="fas fa-user"></i></div>
             <div class="msg-bubble">{{ msg.text }}</div>
           </div>
+          <div v-if="isLoading" class="message advisor-message loading">
+            <div class="msg-avatar"><i class="fas fa-leaf"></i></div>
+            <div class="msg-bubble">
+              <span class="loading-dots"><i></i><i></i><i></i></span>
+            </div>
+          </div>
         </div>
         <div class="advisor-footer">
           <input
@@ -274,8 +280,9 @@
             v-model="advisorInput"
             placeholder="想问些什么..."
             @keyup.enter="sendAdvisorMessage"
+            :disabled="isLoading"
           >
-          <button @click="sendAdvisorMessage"><i class="fas fa-paper-plane"></i></button>
+          <button @click="sendAdvisorMessage" :disabled="isLoading"><i class="fas fa-paper-plane"></i></button>
         </div>
       </div>
     </div>
@@ -285,7 +292,7 @@
 <script>
 import BulletMessage from '../components/BulletMessage.vue'
 import ImageUploader from '../components/ImageUploader.vue'
-import { getArticleList, getArticleDetail, createDisasterArea, generateArticle } from '../services/api.js'
+import { getArticleList, getArticleDetail, createDisasterArea, generateArticle, createConversation, sendChatMessage, getConversationMessages, getUserInfo } from '../services/api.js'
 
 export default {
   name: 'DisasterPage',
@@ -394,9 +401,10 @@ export default {
       ],
       advisorVisible: false,
       advisorInput: '',
-      advisorMessages: [
-        { sender: 'advisor', text: '您好，我是小援。有什么我可以帮您的吗？比如想了解某个灾区的情况，或者想知道怎么提供帮助。' }
-      ]
+      advisorMessages: [],
+      conversationId: '',
+      userId: localStorage.getItem('userId') || '',
+      isLoading: false
     }
   },
   computed: {
@@ -566,8 +574,36 @@ export default {
       alert(`感谢您的心意！您为 ${this.donateArea.name} 捐助 ¥ ${this.donationAmount.toLocaleString()} 元。\n\n捐赠编号：AID${Date.now().toString().slice(-8)}\n我们会通过短信告诉您后续的使用情况。`);
       this.backToHome();
     },
-    openAdvisor() {
+    async openAdvisor() {
       this.advisorVisible = true;
+      
+      // 先获取用户信息
+      if (!this.userId) {
+        try {
+          console.log('正在获取用户信息...');
+          const res = await getUserInfo();
+          console.log('获取用户信息返回:', res);
+          if (res.success && res.data) {
+            this.userId = res.data.id;
+            console.log('用户ID已获取:', this.userId);
+          } else {
+            console.error('获取用户信息失败:', res.message);
+          }
+        } catch (e) {
+          console.error('获取用户信息失败:', e);
+        }
+      } else {
+        console.log('已有用户ID:', this.userId);
+      }
+      
+      // 检查是否有会话ID
+      if (!this.conversationId) {
+        await this.initConversation();
+      } else {
+        // 加载历史消息
+        await this.loadMessages();
+      }
+      
       this.$nextTick(() => {
         const container = this.$refs.advisorMessages;
         if (container) container.scrollTop = container.scrollHeight;
@@ -576,43 +612,132 @@ export default {
     closeAdvisor() {
       this.advisorVisible = false;
     },
-    sendAdvisorMessage() {
-      if (!this.advisorInput.trim()) return;
+    async initConversation() {
+      try {
+        // 从localStorage获取会话ID
+        const savedConversationId = localStorage.getItem('aiConversationId');
+        if (savedConversationId) {
+          this.conversationId = savedConversationId;
+          await this.loadMessages();
+          return;
+        }
+        
+        // 检查 userId
+        console.log('initConversation 中的 userId:', this.userId);
+        if (!this.userId) {
+          console.error('userId 为空，无法创建会话');
+          this.advisorMessages = [
+            { sender: 'advisor', text: '请先登录后再使用AI对话功能。' }
+          ];
+          return;
+        }
+        
+        // 获取当前灾区ID（转为字符串）
+        const userId = String(this.userId);
+        
+        // 使用示例灾区ID（后期改为动态获取）
+        const disasterAreaId = '98acb7c9-580f-4410-8513-159bd531caed';
+        
+        console.log('创建会话参数:', { disaster_area_id: disasterAreaId, user_id: userId });
+        
+        // 创建新会话
+        const res = await createConversation({
+          disaster_area_id: disasterAreaId,
+          user_id: userId
+        });
+        
+        console.log('创建会话返回:', res);
+        
+        if (res.success && res.data) {
+          this.conversationId = res.data.id;
+          console.log('会话ID已保存:', this.conversationId);
+          localStorage.setItem('aiConversationId', this.conversationId);
+          // 显示系统提示消息
+          if (res.data.messages && res.data.messages.length > 0) {
+            this.advisorMessages = res.data.messages.map(msg => ({
+              sender: msg.role === 'user' ? 'user' : 'advisor',
+              text: msg.content
+            }));
+          }
+        } else {
+          console.error('创建会话失败:', res.message);
+          this.advisorMessages = [
+            { sender: 'advisor', text: '创建会话失败，请稍后重试。' }
+          ];
+        }
+      } catch (error) {
+        console.error('创建会话失败:', error);
+        // 使用默认欢迎消息
+        this.advisorMessages = [
+          { sender: 'advisor', text: '您好，我是小援。有什么我可以帮您的吗？比如想了解某个灾区的情况，或者想知道怎么提供帮助。' }
+        ];
+      }
+    },
+    async loadMessages() {
+      if (!this.conversationId) return;
+      
+      try {
+        const res = await getConversationMessages(this.conversationId);
+        if (res.success && res.data) {
+          this.advisorMessages = res.data.map(msg => ({
+            sender: msg.role === 'user' ? 'user' : 'advisor',
+            text: msg.content
+          }));
+        }
+      } catch (error) {
+        console.error('加载消息失败:', error);
+      }
+    },
+    async sendAdvisorMessage() {
+      if (!this.advisorInput.trim() || this.isLoading) return;
+      
+      // 如果没有会话，先创建
+      if (!this.conversationId) {
+        await this.initConversation();
+      }
+      
+      console.log('发送消息时的会话ID:', this.conversationId);
 
       const userMsg = this.advisorInput;
       this.advisorMessages.push({ sender: 'user', text: userMsg });
       this.advisorInput = '';
+      this.isLoading = true;
 
       this.$nextTick(() => {
         const container = this.$refs.advisorMessages;
         if (container) container.scrollTop = container.scrollHeight;
       });
 
-      setTimeout(() => {
-        let reply = '';
-        if (userMsg.includes('汶川') || userMsg.includes('四川')) {
-          reply = '汶川那边主要是震后重建，现在最需要的是学习用品和过冬衣物。您可以通过"提供帮助"按钮支持他们。';
-        } else if (userMsg.includes('河南') || userMsg.includes('暴雨')) {
-          reply = '河南暴雨过后，很多农田需要恢复，农具和种子是眼下比较缺的。';
-        } else if (userMsg.includes('泸定') || userMsg.includes('地震')) {
-          reply = '泸定地震后，山里冬天冷，保暖衣物和帐篷还是很需要。';
-        } else if (userMsg.includes('旱') || userMsg.includes('水')) {
-          reply = '北方旱情还在持续，有些村子喝水都成问题，送水车每天都要进村。';
-        } else if (userMsg.includes('怎么捐') || userMsg.includes('帮助')) {
-          reply = '您点进灾区详情页，点击"提供帮助"按钮，就可以选择金额。所有善款都会用在当地乡亲们身上。';
-        } else if (userMsg.includes('你好') || userMsg.includes('在吗')) {
-          reply = '您好，我在呢。有什么想了解的，随时问我。';
+      try {
+        const res = await sendChatMessage({
+          conversation_id: this.conversationId,
+          message: userMsg
+        });
+        
+        if (res.success && res.data && res.data.ai_response) {
+          this.advisorMessages.push({ 
+            sender: 'advisor', 
+            text: res.data.ai_response.content 
+          });
         } else {
-          reply = '谢谢您的关心。您是想了解哪个灾区的情况，还是想知道怎么提供帮助？';
+          this.advisorMessages.push({ 
+            sender: 'advisor', 
+            text: '抱歉，我暂时无法回复，请稍后再试。' 
+          });
         }
-
-        this.advisorMessages.push({ sender: 'advisor', text: reply });
-
+      } catch (error) {
+        console.error('发送消息失败:', error);
+        this.advisorMessages.push({ 
+          sender: 'advisor', 
+          text: '抱歉，网络出现问题，请稍后再试。' 
+        });
+      } finally {
+        this.isLoading = false;
         this.$nextTick(() => {
           const container = this.$refs.advisorMessages;
           if (container) container.scrollTop = container.scrollHeight;
         });
-      }, 600);
+      }
     }
   }
 }
@@ -1571,6 +1696,50 @@ export default {
 .advisor-footer button:hover {
   transform: scale(1.05);
   box-shadow: 0 8px 18px rgba(194, 112, 74, 0.4);
+}
+
+.advisor-footer button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.advisor-footer input:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+/* 加载动画 */
+.loading-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.loading-dots i {
+  width: 8px;
+  height: 8px;
+  background: #999;
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.loading-dots i:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots i:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 /* ===== 页脚 ===== */
