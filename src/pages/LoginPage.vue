@@ -1,5 +1,11 @@
 <template>
   <div class="auth-page page-enter-active">
+    <!-- Toast 提示 -->
+    <div v-if="toast.show" class="toast" :class="toast.type">
+      <i class="fas fa-check-circle"></i>
+      <span>{{ toast.message }}</span>
+    </div>
+    
     <button class="auth-back-btn" @click="goToHome">
       <i class="fas fa-arrow-left"></i> 返回主页
     </button>
@@ -149,7 +155,13 @@ export default {
       },
       loading: false,
       captchaId: '',
-      captchaImage: ''
+      captchaImage: '',
+      toast: {
+        show: false,
+        message: '',
+        type: 'success',
+        timer: null
+      }
     }
   },
   mounted() {
@@ -245,15 +257,26 @@ export default {
             localStorage.setItem('rememberLogin', 'true');
           }
 
-          alert(`登录成功！欢迎登录AI公益资源调度平台`);
+          // 先跳转到主页，再显示 toast 提示
           this.$router.push('/home');
+          this.showToast('登录成功！欢迎登录AI公益资源调度平台', 'success');
         } else {
-          alert(res.message || '登录失败');
+          // 显示更友好的错误提示
+          const errorMsg = res.message || '登录失败';
+          if (errorMsg.includes('不存在') || errorMsg.includes('未注册')) {
+            alert('该账号尚未注册，请先注册后再登录');
+          } else if (errorMsg.includes('密码')) {
+            alert('密码错误，请重新输入');
+          } else if (errorMsg.includes('验证码')) {
+            alert('验证码错误或已过期，请重新输入');
+          } else {
+            alert(errorMsg);
+          }
           this.refreshCaptcha();
         }
       } catch (error) {
         console.error('登录错误:', error);
-        alert(error.message || '登录失败，请检查账号密码');
+        alert('网络连接失败，请检查网络后重试');
         this.refreshCaptcha();
       } finally {
         this.loading = false;
@@ -272,6 +295,22 @@ export default {
     },
     showForgotPassword() {
       alert('忘记密码功能：请通过注册手机号或邮箱找回密码，或联系平台客服：400-123-4567');
+    },
+    showToast(message, type = 'success') {
+      // 清除之前的定时器
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+      }
+      
+      // 显示 toast
+      this.toast.message = message;
+      this.toast.type = type;
+      this.toast.show = true;
+      
+      // 3秒后自动隐藏
+      this.toast.timer = setTimeout(() => {
+        this.toast.show = false;
+      }, 3000);
     }
   }
 }
@@ -283,6 +322,48 @@ export default {
   padding: 0;
   box-sizing: border-box;
   font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+/* Toast 提示样式 */
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #4caf50;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  animation: slideDown 0.3s ease;
+}
+
+.toast.success {
+  background: #4caf50;
+}
+
+.toast.error {
+  background: #f44336;
+}
+
+.toast i {
+  font-size: 18px;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .auth-page {
